@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f0f0f0;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    input {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+      padding: 8px;
+    }
+    button {
+      padding: 10px 15px;
+      margin-right: 5px;
+      cursor: pointer;
+      border: none;
+      background: #007bff;
+      color: white;
+      border-radius: 4px;
+    }
+    button:hover { background: #0056b3; }
+    
+    /* Floating Log Styles */
+    #logger {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 350px;
+      height: 300px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #0f0;
+      font-family: monospace;
+      font-size: 13px;
+      padding: 10px;
+      border-radius: 8px;
+      overflow-y: auto;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      z-index: 9999;
+    }
+    .log-entry {
+      margin-bottom: 5px;
+      word-wrap: break-word;
+      border-bottom: 1px solid #333;
+      padding-bottom: 3px;
+    }
+    .log-time { color: #888; font-size: 11px; margin-right: 5px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h3>Auth Test</h3>
+    <input type="text" id="username" placeholder="Username" />
+    <input type="password" id="password" placeholder="Password" />
+    
+    <button id="btn-login">Login</button>
+    <button id="btn-signup">Sign Up</button>
+    <button id="btn-logout" style="background:#dc3545;">Logout</button>
+  </div>
+
+  <iframe id="backend-frame" style="display: none;"></iframe>
+
+  <div id="logger"></div>
+
+  <script>
+    const BACKEND_URL = "https://cdn.jsdelivr.net/gh/lotsacookie/Dnekcabtset/backend.html";
+    const iframe = document.getElementById('backend-frame');
+    const logger = document.getElementById('logger');
+    let backendPort = null;
+
+    function logMsg(msg, isObj = false) {
+      const el = document.createElement('div');
+      el.className = 'log-entry';
+      const time = new Date().toLocaleTimeString();
+      const text = isObj ? JSON.stringify(msg) : msg;
+      el.innerHTML = `<span class="log-time">[${time}]</span> ${text}`;
+      logger.appendChild(el);
+      logger.scrollTop = logger.scrollHeight; // Auto-scroll to bottom
+    }
+
+    async function loadBackend() {
+      logMsg("Fetching backend from jsDelivr...");
+      try {
+        const res = await fetch(BACKEND_URL);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const html = await res.text();
+        logMsg("Backend fetched successfully. Injecting into iframe...");
+        
+        iframe.srcdoc = html;
+      } catch (err) {
+        logMsg("Failed to fetch backend: " + err.message);
+      }
+    }
+
+    iframe.onload = () => {
+      logMsg("Iframe loaded. Initializing MessageChannel (init_cable)...");
+      
+      const channel = new MessageChannel();
+      backendPort = channel.port1;
+
+      backendPort.onmessage = (e) => {
+        const data = e.data;
+        if (!data) return;
+        
+        logMsg(`<b>Received:</b> ${data.type}`);
+        logMsg(data, true);
+
+        if (data.type === 'ready') {
+          logMsg("✅ Backend proxy is initialized and ready to use!");
+        }
+      };
+
+      iframe.contentWindow.postMessage({ type: 'init_cable' }, '*', [channel.port2]);
+    };
+
+    document.getElementById('btn-login').onclick = () => {
+      if (!backendPort) return logMsg("Error: Backend not ready yet.");
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      
+      logMsg("Sending login request...");
+      backendPort.postMessage({ type: 'login', username: u, password: p });
+    };
+
+    document.getElementById('btn-signup').onclick = () => {
+      if (!backendPort) return logMsg("Error: Backend not ready yet.");
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      
+      logMsg("Sending signup request...");
+      backendPort.postMessage({ type: 'signup', username: u, password: p });
+    };
+
+    document.getElementById('btn-logout').onclick = () => {
+      if (!backendPort) return logMsg("Error: Backend not ready yet.");
+      
+      logMsg("Sending logout request...");
+      backendPort.postMessage({ type: 'logout' });
+      logMsg("Logged out (localStorage cleared).");
+    };
+
+    loadBackend();
+  </script>
+</body>
+</html>
